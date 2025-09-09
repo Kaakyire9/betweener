@@ -7,16 +7,162 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//
+// ENUMS
+//
+enum Gender {
+  MALE
+  FEMALE
+  NON_BINARY
+  OTHER
+}
+
+enum Religion {
+  CHRISTIAN
+  MUSLIM
+  TRADITIONALIST
+  OTHER
+}
+
+enum MatchStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+//
+// MODELS
+//
 model User {
   id        String   @id @default(cuid())
   name      String
-  age       Int
   email     String   @unique
-  image     String?
+  password  String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastActive DateTime?
+  isVerified Boolean @default(false)
+  isPremium  Boolean @default(false)
+  isActive   Boolean @default(true)
 
+  profile   Profile?
+  photos    Photo[]
   sentMessages     Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
+  matchesSent      Match[]   @relation("MatchesSent")
+  matchesReceived  Match[]   @relation("MatchesReceived")
+  blocksSent       Block[]   @relation("BlocksSent")
+  blocksReceived   Block[]   @relation("BlocksReceived")
+  reportsSent      Report[]  @relation("ReportsSent")
+  reportsReceived  Report[]  @relation("ReportsReceived")
+  settings         Settings?
+  subscription     Subscription?
+
+  @@index([email])
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  fullName  String   @map("full_name")
+  age       Int
+  gender    Gender
+  bio       String
+  region    String
+  tribe     String
+  religion  Religion
+  avatarUrl String?  @map("avatar_url")
+  location  String?
+  latitude  Float?
+  longitude Float?
+  minAgeInterest Int? @map("min_age_interest")
+  maxAgeInterest Int? @map("max_age_interest")
+  online    Boolean @default(false)
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interests ProfileInterest[]
+
+  @@index([region])
+  @@index([tribe])
+  @@index([religion])
+  @@index([age])
+  @@index([latitude, longitude])
+  @@map("profiles")
+}
+
+model Interest {
+  id     String    @id @default(cuid())
+  name   String    @unique
+  users  ProfileInterest[]
+}
+
+model ProfileInterest {
+  profileId  String
+  interestId String
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  interest   Interest @relation(fields: [interestId], references: [id])
+
+  @@id([profileId, interestId])
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  url       String
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, url])
+}
+
+model Match {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  createdAt  DateTime @default(now())
+  status     MatchStatus @default(PENDING)
+
+  sender     User     @relation("MatchesSent", fields: [senderId], references: [id])
+  receiver   User     @relation("MatchesReceived", fields: [receiverId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model Block {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  createdAt  DateTime @default(now())
+
+  sender     User     @relation("BlocksSent", fields: [senderId], references: [id])
+  receiver   User     @relation("BlocksReceived", fields: [receiverId], references: [id])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  reason     String
+  createdAt  DateTime @default(now())
+
+  sender     User     @relation("ReportsSent", fields: [senderId], references: [id])
+  receiver   User     @relation("ReportsReceived", fields: [receiverId], references: [id])
+}
+
+model Settings {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  notifications Boolean  @default(true)
+  showOnline    Boolean  @default(true)
+  darkMode      Boolean  @default(false)
+  showAge       Boolean  @default(true)
+  showDistance  Boolean  @default(true)
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Message {
@@ -25,7 +171,20 @@ model Message {
   createdAt  DateTime @default(now())
   senderId   String
   receiverId String
+  isRead     Boolean  @default(false)
 
-  sender   User @relation("SentMessages", fields: [senderId], references: [id])
-  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  type      String   // e.g., GOLD, SILVER
+  startedAt DateTime @default(now())
+  endsAt    DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
