@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Snackbar, Alert } from "@mui/material";
+import LikePassToast from "@/components/LikePassToast";
 import { useDiscovery } from "@/components/discovery/DiscoveryContext";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 // import { supabase } from "@/lib/supabase";
@@ -23,20 +23,22 @@ type DiscoveryFeedProps = {
   onLike?: (profile: Profile) => void;
   onPass?: (profile: Profile) => void;
   onProfileClick?: (profile: Profile) => void;
+  onMutualMatch?: (profile: Profile) => void;
 };
 
 
 type ViewMode = typeof VIEW_MODES[number];
 
 
-export default function DiscoveryFeed({ onLike, onPass, onProfileClick }: DiscoveryFeedProps) {
+export default function DiscoveryFeed({ onLike, onPass, onProfileClick, onMutualMatch }: DiscoveryFeedProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [toast, setToast] = useState<{ open: boolean; type: "like" | "pass" }>({ open: false, type: "like" });
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: "success" | "error" | "info" }>({ open: false, message: "", severity: "success" });
   const [loading, setLoading] = useState(false);
   const { filters } = useDiscovery();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [matchModal, setMatchModal] = useState<{ open: boolean; name: string; avatarUrl?: string }>({ open: false, name: "", avatarUrl: undefined });
+  // Removed matchModal state; now handled by parent via onMutualMatch
 
   // Fetch current user ID on mount
   useEffect(() => {
@@ -60,10 +62,21 @@ export default function DiscoveryFeed({ onLike, onPass, onProfileClick }: Discov
         return;
       }
       setLoading(true);
+
+      // Exclude users already liked or passed
+      // Get all target_ids the current user has liked or passed
+      const { data: matchesData, error: matchesError } = await supabaseBrowser
+        .from("matches")
+        .select("target_id")
+        .eq("user_id", currentUserId);
+
+      const excludedIds = matchesData ? matchesData.map((m: any) => m.target_id) : [];
+
       let query = supabaseBrowser
         .from("profiles")
         .select("id, full_name, age, avatar_url, bio, region, tribe, religion")
-        .neq("id", currentUserId);
+        .neq("id", currentUserId)
+        .not("id", "in", `(${excludedIds.map((id: string) => `'${id}'`).join(",")})`);
 
       // Restore filters
       if (filters.ageRange) {
@@ -104,16 +117,54 @@ export default function DiscoveryFeed({ onLike, onPass, onProfileClick }: Discov
   const handleLike = async (profile: Profile) => {
     if (!currentUserId) return;
     if (onLike) onLike(profile);
-    // Insert Like action in Supabase
-    const { error } = await supabaseBrowser.from("matches").insert({
-      user_id: currentUserId,
-      target_id: profile.id,
-      action: "like"
-    });
-    if (error) {
-      setSnackbar({ open: true, message: `Error: ${error.message}`, severity: "error" });
+
+    // Check if a like or pass already exists
+    const { data: existing, error: checkError } = await supabaseBrowser
+      .from("matches")
+      .select("id, action")
+      .eq("user_id", currentUserId)
+      .eq("target_id", profile.id)
+      .maybeSingle();
+
+    if (checkError) {
+      setSnackbar({ open: true, message: `Error: ${checkError.message}`, severity: "error" });
       return;
     }
+
+
+    if (existing && existing.action === "like") {
+      setToast({ open: true, type: "like" });
+      setTimeout(() => setToast((prev) => ({ ...prev, open: false })), 1200);
+      setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
+      return;
+    }
+
+    if (existing && existing.action === "pass") {
+      // Optionally update the action to "like"
+      await supabaseBrowser
+        .from("matches")
+        .update({ action: "like" })
+        .eq("id", existing.id);
+      setToast({ open: true, type: "like" });
+      setTimeout(() => setToast((prev) => ({ ...prev, open: false })), 1200);
+      setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
+      return;
+    } else if (!existing) {
+      // Insert Like action in Supabase
+      const { error } = await supabaseBrowser.from("matches").insert({
+        user_id: currentUserId,
+        target_id: profile.id,
+        action: "like"
+      });
+      if (error) {
+        setSnackbar({ open: true, message: `Error: ${error.message}`, severity: "error" });
+        return;
+      }
+      setToast({ open: true, type: "like" });
+      setTimeout(() => setToast((prev) => ({ ...prev, open: false })), 1200);
+      setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
+    }
+
     // Check for mutual match
     const { data: mutual, error: mutualError } = await supabaseBrowser
       .from("matches")
@@ -123,11 +174,9 @@ export default function DiscoveryFeed({ onLike, onPass, onProfileClick }: Discov
       .eq("action", "like")
       .maybeSingle();
     if (mutualError) {
-      setSnackbar({ open: true, message: `You liked ${profile.full_name}!`, severity: "success" });
+      // No-op for error, already handled
     } else if (mutual) {
-  setMatchModal({ open: true, name: profile.full_name, avatarUrl: profile.avatar_url });
-    } else {
-      setSnackbar({ open: true, message: `You liked ${profile.full_name}!`, severity: "success" });
+      if (onMutualMatch) onMutualMatch(profile);
     }
     setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
   };
@@ -144,7 +193,8 @@ export default function DiscoveryFeed({ onLike, onPass, onProfileClick }: Discov
     if (error) {
       setSnackbar({ open: true, message: `Error: ${error.message}`, severity: "error" });
     } else {
-      setSnackbar({ open: true, message: `You passed on ${profile.full_name}.`, severity: "info" });
+      setToast({ open: true, type: "pass" });
+      setTimeout(() => setToast((prev) => ({ ...prev, open: false })), 1200);
       setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
     }
   };
@@ -250,37 +300,10 @@ export default function DiscoveryFeed({ onLike, onPass, onProfileClick }: Discov
           ))}
         </div>
       )}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={2500}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-        {/* Mutual Match Modal */}
-        <Dialog open={matchModal.open} onOpenChange={open => setMatchModal(m => ({ ...m, open }))}>
-          <DialogContent className="flex flex-col items-center justify-center gap-4">
-            <DialogHeader>
-              <DialogTitle>It's a Match! 🎉</DialogTitle>
-              <DialogDescription>
-                You and <span className="font-bold">{matchModal.name}</span> liked each other!
-              </DialogDescription>
-            </DialogHeader>
-            {matchModal.avatarUrl && (
-              <img src={matchModal.avatarUrl} alt={matchModal.name} className="w-24 h-24 rounded-full object-cover border-4 border-pink-400 shadow-lg" />
-            )}
-            <div className="text-center text-pink-600 font-semibold">Start a chat and say hello!</div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <button className="bg-pink-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-pink-700 transition">Close</button>
-              </DialogClose>
-              {/* Future: Add a button to start a chat */}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+
+      <LikePassToast open={toast.open} type={toast.type} onClose={() => setToast((prev) => ({ ...prev, open: false }))} />
+    {/* Snackbar and Alert code removed */}
+
     </div>
   );
 }

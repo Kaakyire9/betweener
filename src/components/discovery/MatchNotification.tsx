@@ -36,7 +36,7 @@ export default function MatchNotification({ open, onClose, currentUser, matchedU
           )}
         </div>
       </div>
-      <div className="font-bold text-lg mb-2">It's a match!</div>
+  <div className="font-bold text-lg mb-2">{`You've liked ${matchedUser.name}`}</div>
       <div className="mb-4 text-sm">You and <span className="font-semibold">{matchedUser.name}</span> like each other.</div>
       <div className="flex gap-3">
         <button

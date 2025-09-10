@@ -31,9 +31,14 @@ export default function DiscoveryPage() {
     setProfileModalOpen(true);
   };
 
-  // Handler for Like action
+
+  // Handler for Like action (single like)
   const handleLike = (profile: any) => {
-    // Simulate a match for demo; in real app, check if mutual like
+    // No-op here; DiscoveryFeed handles snackbar
+  };
+
+  // Handler for mutual match
+  const handleMutualMatch = (profile: any) => {
     setMatchedUser(profile);
     setMatchOpen(true);
   };
@@ -59,6 +64,7 @@ export default function DiscoveryPage() {
           onProfileClick={handleProfileClick}
           onLike={handleLike}
           onPass={handlePass}
+          onMutualMatch={handleMutualMatch}
         />
         {/* 3. Profile Preview Modal */}
         <ProfilePreviewModal
