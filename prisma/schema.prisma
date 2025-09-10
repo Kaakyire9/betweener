@@ -30,27 +30,37 @@ enum MatchStatus {
   REJECTED
 }
 
+enum SwipeAction {
+  LIKE
+  PASS
+  SUPERLIKE
+}
+
+enum SubscriptionType {
+  FREE
+  SILVER
+  GOLD
+}
+
 //
 // MODELS
 //
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  lastActive DateTime?
-  isVerified Boolean @default(false)
-  isPremium  Boolean @default(false)
-  isActive   Boolean @default(true)
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  email        String        @unique
+  password     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  lastActive   DateTime?
+  isVerified   Boolean       @default(false)
+  isPremium    Boolean       @default(false)
+  isActive     Boolean       @default(true)
 
-  profile   Profile?
-  photos    Photo[]
+  profile      Profile?
+  photos       Photo[]
   sentMessages     Message[] @relation("SentMessages")
   receivedMessages Message[] @relation("ReceivedMessages")
-  matchesSent      Match[]   @relation("MatchesSent")
-  matchesReceived  Match[]   @relation("MatchesReceived")
   blocksSent       Block[]   @relation("BlocksSent")
   blocksReceived   Block[]   @relation("BlocksReceived")
   reportsSent      Report[]  @relation("ReportsSent")
@@ -62,46 +72,51 @@ model User {
 }
 
 model Profile {
-  id        String   @id @default(cuid())
-  userId    String   @unique @map("user_id")
-  fullName  String   @map("full_name")
-  age       Int
-  gender    Gender
-  bio       String
-  region    String
-  tribe     String
-  religion  Religion
-  avatarUrl String?  @map("avatar_url")
-  location  String?
-  latitude  Float?
-  longitude Float?
-  minAgeInterest Int? @map("min_age_interest")
-  maxAgeInterest Int? @map("max_age_interest")
-  online    Boolean @default(false)
-  deletedAt DateTime? @map("deleted_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @unique @db.Uuid @map("user_id")
+  fullName       String    @map("full_name")
+  age            Int
+  gender         Gender
+  bio            String
+  region         String
+  tribe          String
+  religion       Religion
+  avatarUrl      String?   @map("avatar_url")
+  location       String?
+  latitude       Float?
+  longitude      Float?
+  minAgeInterest Int?      @map("min_age_interest")
+  maxAgeInterest Int?      @map("max_age_interest")
+  online         Boolean   @default(false)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  interests ProfileInterest[]
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interests  ProfileInterest[]
+  swipes     Swipe[]            @relation("ProfileSwipes")
+  swipedBy   Swipe[]            @relation("ProfileSwipedBy")
+  matches1   Match[]            @relation("ProfileMatches1")
+  matches2   Match[]            @relation("ProfileMatches2")
 
   @@index([region])
   @@index([tribe])
   @@index([religion])
   @@index([age])
   @@index([latitude, longitude])
+  @@index([fullName])
   @@map("profiles")
 }
 
 model Interest {
-  id     String    @id @default(cuid())
-  name   String    @unique
-  users  ProfileInterest[]
+  id    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name  String             @unique
+  users ProfileInterest[]
 }
 
 model ProfileInterest {
-  profileId  String
-  interestId String
+  profileId  String   @db.Uuid
+  interestId String   @db.Uuid
   profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   interest   Interest @relation(fields: [interestId], references: [id])
 
@@ -109,43 +124,45 @@ model ProfileInterest {
 }
 
 model Photo {
-  id        String   @id @default(cuid())
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   url       String
-  userId    String
+  userId    String   @db.Uuid
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, url])
 }
 
-model Match {
-  id         String   @id @default(cuid())
-  senderId   String
-  receiverId String
-  createdAt  DateTime @default(now())
-  status     MatchStatus @default(PENDING)
-
-  sender     User     @relation("MatchesSent", fields: [senderId], references: [id])
-  receiver   User     @relation("MatchesReceived", fields: [receiverId], references: [id])
-
-  @@index([senderId])
-  @@index([receiverId])
-}
-
 model Block {
-  id         String   @id @default(cuid())
-  senderId   String
-  receiverId String
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  senderId   String   @db.Uuid
+  receiverId String   @db.Uuid
   createdAt  DateTime @default(now())
 
   sender     User     @relation("BlocksSent", fields: [senderId], references: [id])
   receiver   User     @relation("BlocksReceived", fields: [receiverId], references: [id])
 }
 
+model Message {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  text       String
+  createdAt  DateTime @default(now())
+  senderId   String   @db.Uuid
+  receiverId String   @db.Uuid
+  isRead     Boolean  @default(false)
+
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@map("messages") 
+}
+
 model Report {
-  id         String   @id @default(cuid())
-  senderId   String
-  receiverId String
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  senderId   String   @db.Uuid
+  receiverId String   @db.Uuid
   reason     String
   createdAt  DateTime @default(now())
 
@@ -154,8 +171,8 @@ model Report {
 }
 
 model Settings {
-  id            String   @id @default(cuid())
-  userId        String   @unique
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @unique @db.Uuid
   notifications Boolean  @default(true)
   showOnline    Boolean  @default(true)
   darkMode      Boolean  @default(false)
@@ -165,26 +182,43 @@ model Settings {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Message {
-  id         String   @id @default(cuid())
-  text       String
-  createdAt  DateTime @default(now())
-  senderId   String
-  receiverId String
-  isRead     Boolean  @default(false)
 
-  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
-  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
-
-  @@index([senderId])
-  @@index([receiverId])
-}
 
 model Subscription {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  type      String   // e.g., GOLD, SILVER
-  startedAt DateTime @default(now())
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String           @unique @db.Uuid
+  type      SubscriptionType
+  startedAt DateTime         @default(now())
   endsAt    DateTime
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Swipe {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String      @db.Uuid
+  targetId  String      @db.Uuid
+  action    SwipeAction
+  createdAt DateTime    @default(now())
+
+  user      Profile     @relation("ProfileSwipes", fields: [userId], references: [id], onDelete: Cascade)
+  target    Profile     @relation("ProfileSwipedBy", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([targetId])
+  @@map("swipes")
+}
+
+model Match {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user1Id   String   @db.Uuid
+  user2Id   String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user1     Profile  @relation("ProfileMatches1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     Profile  @relation("ProfileMatches2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@map("matches")
 }
