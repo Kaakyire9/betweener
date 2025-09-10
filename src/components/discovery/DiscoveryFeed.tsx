@@ -70,13 +70,20 @@ export default function DiscoveryFeed({ onLike, onPass, onProfileClick, onMutual
         .select("target_id")
         .eq("user_id", currentUserId);
 
-      const excludedIds = matchesData ? matchesData.map((m: any) => m.target_id) : [];
+  const excludedIds = matchesData ? matchesData.map((m: any) => m.target_id) : [];
+  console.log('[DiscoveryFeed] Excluded IDs:', excludedIds);
+
 
       let query = supabaseBrowser
         .from("profiles")
         .select("id, full_name, age, avatar_url, bio, region, tribe, religion")
-        .neq("id", currentUserId)
-        .not("id", "in", `(${excludedIds.map((id: string) => `'${id}'`).join(",")})`);
+        .neq("id", currentUserId);
+
+      if (excludedIds.length > 0) {
+        const inClause = `(${excludedIds.join(",")})`;
+        console.log('[DiscoveryFeed] Exclusion IN clause:', inClause);
+        query = query.not("id", "in", inClause);
+      }
 
       // Restore filters
       if (filters.ageRange) {
@@ -101,8 +108,9 @@ export default function DiscoveryFeed({ onLike, onPass, onProfileClick, onMutual
         return;
       }
       console.log("[DiscoveryFeed] Profiles fetched:", data);
-      setProfiles(data || []);
-      setLoading(false);
+  setProfiles(data || []);
+  console.log('[DiscoveryFeed] Displayed profile IDs:', (data || []).map((p: any) => p.id));
+  setLoading(false);
     }
     fetchProfiles();
   }, [filters, currentUserId]);
